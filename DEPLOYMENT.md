@@ -12,6 +12,8 @@ Render's free service loses local SQLite data when its ephemeral filesystem rese
 
 PythonAnywhere's free plan can support a small manual pilot, but new free accounts have no scheduled tasks and the provider discourages SQLite for production. That leaves the automatic notification worker unresolved. [Free account features](https://help.pythonanywhere.com/pages/FreeAccountsFeatures/), [database guidance](https://help.pythonanywhere.com/pages/KindsOfDatabases). A static host alone cannot run this backend.
 
+For the selected fresh-database deployment, begin with the account, VM, DNS and acceptance checklist in [deploy/VM_SETUP.md](deploy/VM_SETUP.md).
+
 ## Ubuntu installation
 
 You must supply your cloud account, SSH access and an HTTPS hostname. Point the hostname's DNS to the VM. Allow TCP 80/443 in both the OCI network rules and OS firewall; restrict SSH to your administration IP. Do not expose port 8000. Obtain a hostname you control; domain registration is not included in the hosting allowance.
