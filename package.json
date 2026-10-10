@@ -1,0 +1,7 @@
+{
+  "name": "sda-sabbath-school-management",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {"test:e2e": "node node_modules/@playwright/test/cli.js test"},
+  "devDependencies": {"@playwright/test": "1.56.0"}
+}

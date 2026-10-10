@@ -1,0 +1,15 @@
+data
+node_modules
+.e2e-data
+test-results
+playwright-report
+__pycache__
+.env
+.git
+
+.env.*
+*.sqlite3*
+*.db*
+private
+backups
+.venv

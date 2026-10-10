@@ -1,0 +1,10 @@
+[Unit]
+Description=Process notification queue each minute
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=1min
+Unit=ssms-worker.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,4 @@
+# Replace with your hostname; DNS must point to this server.
+church.example.org {
+    reverse_proxy 127.0.0.1:8000
+}

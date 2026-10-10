@@ -1,0 +1,17 @@
+[Unit]
+Description=Sabbath School notification queue worker
+After=network.target
+
+[Service]
+Type=oneshot
+User=ssms
+Group=ssms
+WorkingDirectory=/opt/ssms
+EnvironmentFile=/etc/ssms/ssms.env
+ExecStart=/opt/ssms/.venv/bin/python /opt/ssms/server.py --worker
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ssms
