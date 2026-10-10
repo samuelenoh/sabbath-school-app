@@ -70,4 +70,23 @@ class ProductionTests(unittest.TestCase):
             server.apply_delivery_events(c,'wamid.early')
             self.assertEqual(c.execute('SELECT status FROM messages').fetchone()['status'],'read')
 
+class ClockAndConsentTests(unittest.TestCase):
+    def test_dates_follow_utc_clock(self):
+        from datetime import datetime, timezone
+        with patch('server.datetime') as clock:
+            clock.now.return_value=datetime(2026,10,11,0,15,tzinfo=timezone.utc)
+            self.assertEqual(server.utc_today().isoformat(),'2026-10-11')
+            clock.now.assert_called_once_with(timezone.utc)
+    def test_changed_phone_requires_fresh_consent(self):
+        data={'name':'Consent test','phone':'+233201234567','class_id':1,'whatsapp_opt_in':True}
+        existing={'phone':'+233209876543','whatsapp_opt_in':True,'consent_at':'previous-consent'}
+        with patch('server.record',return_value={}):
+            with self.assertRaisesRegex(ValueError,'fresh consent'):server.validate(None,'members',data,{'role':'admin'},existing)
+            data['whatsapp_opt_in']=False
+            changed=server.validate(None,'members',data,{'role':'admin'},existing)
+            self.assertFalse(changed['whatsapp_opt_in']);self.assertEqual(changed['consent_at'],'')
+            data['whatsapp_opt_in']=True
+            renewed=server.validate(None,'members',data,{'role':'admin'},changed)
+            self.assertTrue(renewed['consent_at'])
+
 if __name__=='__main__':unittest.main()

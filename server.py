@@ -57,6 +57,9 @@ def password_ok(password, stored):
 
 DUMMY_PASSWORD_HASH=password_hash(secrets.token_urlsafe(24))
 
+def utc_today():
+    return datetime.now(timezone.utc).date()
+
 def now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -114,7 +117,7 @@ def initialize(demo=False):
                 cls1=add('classes',{'name':'Berean Fellowship','description':'Adult Bible study and fellowship','teacher_id':2,'age_group':'Adults','room':'Main sanctuary','active':True})
                 cls2=add('classes',{'name':'Cornerstone Youth','description':'Growing in faith together','teacher_id':3,'age_group':'Youth','room':'Youth hall','active':True})
                 for i,name in enumerate(['Ama Asante','Kofi Mensah','Abigail Osei','Samuel Boateng','Elizabeth Addo','Joseph Appiah','Naomi Owusu','David Agyeman']):
-                    add('members',{'name':name,'phone':'','email':'','class_id':cls1 if i<5 else cls2,'status':'Active','birthday':'','joined_on':date.today().isoformat(),'whatsapp_opt_in':False,'consent_at':'','notes':'Synthetic demonstration member'})
+                    add('members',{'name':name,'phone':'','email':'','class_id':cls1 if i<5 else cls2,'status':'Active','birthday':'','joined_on':utc_today().isoformat(),'whatsapp_opt_in':False,'consent_at':'','notes':'Synthetic demonstration member'})
                 add('lessons',{'title':'Growing together in faith','quarter':'2026 Q4','week':2,'day':'2026-10-10','scripture':'Acts 2:42–47','summary':'Read the passage, reflect on fellowship, and discuss practical ways to care for one another.','resource_url':'https://www.sabbathschoolpersonalministries.org/','class_id':cls1})
                 add('events',{'title':'Community Sabbath lunch','day':'2026-10-17','time':'12:30','location':'Fellowship hall','description':'Bring a dish and invite a friend.','capacity':50,'registrations':[]})
                 add('outreach',{'title':'Neighborhood care visits','day':'2026-10-18','owner_id':2,'class_id':cls1,'status':'Planned','people_reached':0,'notes':'Coordinate visits with consenting households.'})
@@ -178,9 +181,11 @@ def validate(c, module, data, user, existing=None):
         d['status']=data.get('status','Active')
         if d['status'] not in ('Active','Inactive','Visitor'): raise ValueError('Invalid member status.')
         d['birthday']=iso_day(data['birthday']) if data.get('birthday') else ''
-        d['joined_on']=iso_day(data.get('joined_on') or date.today().isoformat())
+        d['joined_on']=iso_day(data.get('joined_on') or utc_today().isoformat())
         d['whatsapp_opt_in']=bool_field(data,'whatsapp_opt_in')
         if d['whatsapp_opt_in'] and not d['phone']: raise ValueError('WhatsApp consent requires a phone number.')
+        if existing and existing.get('phone')!=d['phone'] and existing.get('whatsapp_opt_in') and d['whatsapp_opt_in']:
+            raise ValueError('For a changed phone number, first save with WhatsApp consent unchecked, then record fresh consent for that number.')
         retained_consent=(existing or {}).get('consent_at') if (existing or {}).get('phone')==d['phone'] else ''
         d['consent_at']=(retained_consent or now()) if d['whatsapp_opt_in'] else ''
     elif module=='lessons':
@@ -417,7 +422,7 @@ class Handler(BaseHTTPRequestHandler):
                     d=self.body(); c.execute('BEGIN IMMEDIATE');cid=positive_id(d,'class_id');allowed_class(c,user,cid)
                     day=iso_day(d.get('day'))
                     if date.fromisoformat(day).weekday()!=5: raise ValueError('Attendance date must be a Saturday.')
-                    if day>date.today().isoformat(): raise ValueError('Attendance cannot be marked in the future.')
+                    if day>utc_today().isoformat(): raise ValueError('Attendance cannot be marked in the future.')
                     entries=d.get('entries',[])
                     if not isinstance(entries,list) or not entries: raise ValueError('Choose at least one attendance entry.')
                     seen=set()
@@ -435,7 +440,7 @@ class Handler(BaseHTTPRequestHandler):
                     audit(c,uid,'attendance.save',{'class_id':cid,'day':day,'count':len(entries)});c.commit()
                     return self.send(200,{'saved':len(entries)})
                 if path=='/api/reports.csv' and method=='GET':
-                    kind=query.get('kind',['attendance'])[0]; start=iso_day(query.get('start',['2000-01-01'])[0]);end=iso_day(query.get('end',[date.today().isoformat()])[0])
+                    kind=query.get('kind',['attendance'])[0]; start=iso_day(query.get('start',['2000-01-01'])[0]);end=iso_day(query.get('end',[utc_today().isoformat()])[0])
                     if start>end: raise ValueError('Start date must precede end date.')
                     out=io.StringIO(); writer=csv.writer(out)
                     def safe(v):
@@ -595,7 +600,7 @@ def main():
     initialize(args.demo)
     if args.init_only: print('Database initialized.');return
     if args.worker:
-        with connect() as c: queued=run_rules(c,date.today().isoformat())
+        with connect() as c: queued=run_rules(c,utc_today().isoformat())
         print(json.dumps({'queued':queued,'processed':process_queue(100)}));return
     server=ThreadingHTTPServer((args.host,args.port),Handler)
     print(f'SSMS running at http://{args.host}:{server.server_port}',flush=True)

@@ -61,3 +61,9 @@ Before upgrades, back up the database, stop web and worker services, pull review
 ## WhatsApp activation
 
 Follow WHATSAPP_ARCHITECTURE.md. Set all five Meta values only in the private server environment, provision approved templates and consenting recipients, and configure the signed public webhook. The included timer runs one worker at a time approximately each minute; rules use UTC dates. Test live delivery and webhook updates before enabling staff campaigns. Hosting being free does not make Meta messaging free. No real Meta credentials, approved templates, provider delivery, Linux service installation, Docker build or public cloud deployment were tested here.
+
+## Current readiness
+
+Source is ready for operator deployment and acceptance testing for a small single-church installation. The production entrypoint, secure-origin/cookie checks, server-side teacher restrictions, notification safety and consistent SQLite backup were locally verified. There are 23 passing backend tests and four passing Chromium workflows. No blanket production certification is claimed.
+
+Still required before real use: configure the VM and HTTPS hostname, use a fresh production database and private administrator credentials, install the worker timer, schedule protected off-host backups, test restore and monitor the service. Live WhatsApp additionally requires Meta credentials, approved templates, real consent, and provider/webhook acceptance testing. Linux service installation and Docker were prepared but not executed on this Windows host. GitHub publication is separately blocked by integration write access (HTTP 403); the repository URL is already known as samuelenoh/sabbath-school-app.

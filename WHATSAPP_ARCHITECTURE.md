@@ -110,3 +110,5 @@ UI configuration indicators disclose only mode and whether required values are p
 The supported template scope is text body parameters. Media headers, URL/button parameters, inbound chat, session messages, opt-out bots, per-tenant credentials and campaign throttling need additional implementation.
 
 The dashboard process button handles up to three jobs per request; the scheduled worker handles up to 100. Production requests require the configured Origin; webhooks instead authenticate their raw-body signature. The included systemd timer runs one worker at a time approximately once per minute. Rules use UTC dates.
+
+Changing an opted-in phone requires first saving with consent unchecked and then recording fresh consent for the new number. Consent cannot silently carry across to a different recipient. Application dates and scheduled rules use the UTC clock regardless of host timezone.
