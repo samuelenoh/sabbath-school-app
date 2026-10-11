@@ -1,6 +1,6 @@
 # Verification record
 
-Verified locally on Windows on 10 October 2026:
+Verified locally on Windows on 10–11 October 2026:
 
 - 24 Python tests passed: 16 real HTTP/SQLite integration tests and 8 production WSGI/security/consent/UTC/configuration tests.
 - 4 Chromium end-to-end tests passed in 6.0 seconds: all module screens, member creation/attendance persistence/notification dry run, assigned-teacher attendance, and mobile navigation/dialog layout.
@@ -13,4 +13,10 @@ Commands: `python -m unittest discover -s tests -v`, followed by `npm run test:e
 
 Not verified: Docker build, installation of the Linux systemd/Caddy files, real cloud provisioning/HTTPS, live WhatsApp credentials/templates/delivery, high-volume load and independent penetration testing. These require operator configuration and acceptance testing before real church use.
 
-On 11 October 2026 the PostgreSQL adapter was added. Local PostgreSQL tests are skipped because this Windows host has no PostgreSQL server. GitHub CI runs 17 real HTTP PostgreSQL checks in a disposable service database, including concurrent notification claims; its outcome must be checked before deployment. Local SQLite/WSGI and all four browser workflows pass after the adapter change.
+On 11 October 2026, [GitHub CI run 38118364342](https://github.com/samuelenoh/sabbath-school-app/actions/runs/38118364342) passed on application commit `c1afcf93673e4598d6ec307e75604cba93d62dfd`:
+
+- PostgreSQL 16: 17 real HTTP integration checks passed in 3.468 seconds, including simultaneous workers claiming one notification once.
+- SQLite/WSGI: 24 checks passed; 17 PostgreSQL checks were intentionally skipped in this separate job.
+- Chromium: all 4 end-to-end workflows passed in 5.3 seconds.
+
+This verifies 45 executed checks across the two CI jobs. Local PostgreSQL tests are skipped because this Windows host has no PostgreSQL server. The cloud database, Render deployment and live Meta delivery remain unverified.
