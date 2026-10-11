@@ -32,6 +32,19 @@ Verified from the public HTTPS endpoint:
 - `/api/me`, `/api/members` and `/api/offerings` return HTTP 401 without authentication.
 - Content Security Policy prohibits framing and limits scripts/connect sources; X-Content-Type-Options is nosniff.
 
-Not yet verified on the hosted instance: administrator sign-in, authenticated cookie flags, teacher/financial role checks, synthetic record persistence across redeployment, independent backup restore and notification-worker execution. These require a user-authenticated session and operator configuration. The worker remains initially disabled and WhatsApp is dry_run. Render Free can sleep; this is not a guarantee of uninterrupted production hosting.
+Not yet independently verified on the hosted instance: authenticated cookie flags, teacher/financial role checks, independent backup restore and notification-worker execution. Cookie and role behavior are covered by the automated WSGI/HTTP suites; backup and worker acceptance remain operator tasks. The worker remains initially disabled and WhatsApp is dry_run. Render Free can sleep; this is not a guarantee of uninterrupted production hosting.
 
 Passwords and connection strings are excluded from this verification record. The administrator password should be unique, unshared and at least 16 characters; remove the bootstrap password environment variable after changing it through My account.
+
+### Completed hosted acceptance and cleanup
+
+At 06:56 UTC on 11 October 2026, Render confirmed a second successful deployment of `3c0d33a` after the bootstrap password environment variable was removed. No new password was entered by the agent; the user reported changing it through My account.
+
+- The user-authenticated administrator session was available and remained authenticated after the actual redeploy.
+- A clearly labelled synthetic event was created through the hosted UI and verified present after redeployment and a full app reload. This confirms database writes and Neon persistence across a service restart.
+- The synthetic event was deleted afterward; the event list returned to empty. Audit history of the test remains.
+- All ten hosted module screens rendered without an in-page alert: members, classes, attendance, lesson study, offerings, reports, events, outreach, WhatsApp and people/roles.
+- The HTTPS health endpoint and app page returned HTTP 200 after the second deployment.
+- The obsolete SSMS_ADMIN_PASSWORD environment variable was removed and saved in Render. Existing administrator records were retained; bootstrap configuration was not used to reset the live login password.
+
+No provider payment or upgrade was selected. Render Free sleeping/quota limits and Neon Free quotas still apply. The hourly notification workflow is initially disabled until repository variables/secrets are configured, and live Meta credentials/templates/delivery are not enabled or verified. No real members, attendance or offerings were created during acceptance testing.
