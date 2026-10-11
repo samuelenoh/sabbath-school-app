@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: sabbath-school-app
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_production.py
+    healthCheckPath: /healthz
+    autoDeployTrigger: off
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.12
+      - key: DATABASE_URL
+        sync: false
+      - key: SSMS_ENV
+        value: production
+      - key: SSMS_SECURE_COOKIES
+        value: '1'
+      - key: SSMS_HOST
+        value: 0.0.0.0
+      - key: SSMS_ADMIN_EMAIL
+        sync: false
+      - key: SSMS_ADMIN_PASSWORD
+        sync: false
+      - key: WHATSAPP_MODE
+        value: dry_run

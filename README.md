@@ -1,6 +1,6 @@
 # SDA Sabbath School Management System
 
-A runnable, single-church web application with a Python backend, SQLite persistence, and a responsive JavaScript interface. Local demonstrations need Python 3.10+ only. Production uses Waitress (one pinned dependency). Node.js is used for browser tests.
+A runnable, single-church web application with a Python backend, SQLite or persistent PostgreSQL storage, and a responsive JavaScript interface. Local demonstrations need Python 3.10+ only. Hosted deployments use Waitress and psycopg (two pinned dependencies). Node.js is used for browser tests.
 
 The prior `/mnt/data/ssms-app` and `/mnt/data/ssms-web-app.zip` were unavailable on this Windows host. The referenced conversation returned unresolved content-reference placeholders. This implementation therefore follows the modules explicitly requested in the current message; it does not claim to reproduce requirements hidden inside those placeholders.
 
@@ -97,7 +97,7 @@ Restrictions are enforced by the backend; hiding a menu is not the security boun
 
 ## Automated tests
 
-No test data touch your church database. The integration suite uses a temporary SQLite database and real HTTP requests:
+No test data touch your church database. PostgreSQL tests require a disposable local database whose name ends in `_test`; CI provides one automatically. The integration suite uses a temporary SQLite database and real HTTP requests:
 
 ```sh
 python -m unittest discover -s tests -v
@@ -118,11 +118,13 @@ See `TEST_RESULTS.md` for the checks actually performed and their limits.
 
 ## Runtime and deployment
 
+The selected free pilot route is **Render Free + Neon PostgreSQL**. Follow [deploy/RENDER_NEON.md](deploy/RENDER_NEON.md). Oracle VM instructions remain optional historical alternatives.
+
 The backend includes PBKDF2-SHA256 password hashes with individual salts, random eight-hour sessions stored as token hashes, HttpOnly/SameSite cookies, CSRF tokens for writes, login throttling, parameterized SQL, output escaping, CSP, and restricted static-file serving. Record edits check versions to reject stale writes. Attendance uses a unique `(class, member, date)` key and transactional updates. Deletes that would orphan attendance, notifications or registrations are blocked; deactivate members/classes instead.
 
-Public hosting uses `wsgi:create_application()` or `python run_production.py`, with `pip install -r requirements.txt`. The production entrypoint fails closed unless `SSMS_ENV=production`, an explicit absolute `SSMS_DB`, exact HTTPS `SSMS_ORIGIN`, and `SSMS_SECURE_COOKIES=1` are configured. A new database also requires your administrator email and unique password. Demo databases are rejected. Remove the bootstrap password from the service environment after initialization; it is not needed for restarts.
+Public hosting uses `wsgi:create_application()` or `python run_production.py`, with `pip install -r requirements.txt`. The production entrypoint fails closed unless `SSMS_ENV=production`, a private SSL-enabled `DATABASE_URL` or an explicit absolute `SSMS_DB`, exact HTTPS `SSMS_ORIGIN` (automatically supplied by Render when unset), and `SSMS_SECURE_COOKIES=1` are configured. A new database also requires your administrator email and unique password. Demo databases are rejected. Remove the bootstrap password from the service environment after initialization; it is not needed for restarts.
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for the prepared Oracle Always Free VM route, HTTPS proxy, worker timer, persistent storage and backup/restore procedure. No cloud deployment has been performed. Python's built-in HTTP server is restricted to development; production must use WSGI. No penetration or high-volume load test has been performed.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for deployment choices and the optional Oracle VM route, HTTPS proxy, worker timer, persistent storage and backup/restore procedure. No cloud deployment has been performed. Python's built-in HTTP server is restricted to development; production must use WSGI. No penetration or high-volume load test has been performed.
 
 Optional Docker build (not validated on this host):
 

@@ -1,0 +1,36 @@
+name: Notification worker
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ssms-notification-worker
+  cancel-in-progress: false
+jobs:
+  worker:
+    if: vars.SSMS_WORKER_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.SSMS_DATABASE_URL }}
+      SSMS_ENV: production
+      SSMS_ORIGIN: ${{ vars.SSMS_ORIGIN }}
+      SSMS_SECURE_COOKIES: '1'
+      WHATSAPP_MODE: ${{ vars.WHATSAPP_MODE || 'dry_run' }}
+      META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+      META_PHONE_NUMBER_ID: ${{ secrets.META_PHONE_NUMBER_ID }}
+      META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION }}
+      META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+      META_VERIFY_TOKEN: ${{ secrets.META_VERIFY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Validate database configuration
+        run: |
+          python -c "import os; assert os.environ.get('DATABASE_URL','').startswith(('postgres://','postgresql://')), 'Set SSMS_DATABASE_URL secret before enabling worker'"
+      - run: python server.py --worker

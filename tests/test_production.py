@@ -52,6 +52,14 @@ class ProductionTests(unittest.TestCase):
         for i in range(8):
             self.assertEqual(self.call('/api/login','POST',{'email':'admin@church.example','password':'incorrect'},ip=f'192.0.2.{i}')['status'],401)
         self.assertEqual(self.login()['status'],429)
+    def test_render_origin_and_postgres_ssl_configuration(self):
+        with patch.dict(os.environ,{'SSMS_ORIGIN':'','RENDER_EXTERNAL_URL':'https://app.onrender.com'}):
+            self.assertEqual(server.configured_origin(),'https://app.onrender.com')
+            server.validate_configuration(hosted=True)
+        with patch.object(server,'DB','postgresql://user:password@db.example/church?sslmode=require'):
+            server.validate_configuration(hosted=True)
+        with patch.object(server,'DB','postgresql://user:password@db.example/church'):
+            with self.assertRaises(RuntimeError):server.validate_configuration(hosted=True)
     def test_configuration_fail_closed(self):
         for key,value in [('SSMS_ORIGIN','http://church.example'),('SSMS_SECURE_COOKIES','0'),('SSMS_ENV','typo'),('WHATSAPP_MODE','typo'),('WHATSAPP_MODE','live')]:
             with patch.dict(os.environ,{key:value}):

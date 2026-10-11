@@ -2,13 +2,17 @@
 
 Prepared and checked on 10 October 2026. This is a single-church, modest-traffic application. Hosting has not been provisioned and live WhatsApp has not been verified.
 
-## Recommended free route: Oracle Always Free Ubuntu VM
+## Selected free pilot: Render + Neon
+
+The current selected route is Render Free web hosting with external Neon PostgreSQL and an optional GitHub Actions worker. Follow [deploy/RENDER_NEON.md](deploy/RENDER_NEON.md). It preserves the full Python app and persistent data but has cold starts, quotas and best-effort scheduling. Render advises against free-tier production use. No live deployment has been verified.
+
+## Alternative VM route: Oracle Always Free Ubuntu VM
 
 Use an Always Free eligible Ubuntu VM in your home region, with persistent boot storage. An A1 allocation of 1 OCPU / 2 GB and a 50 GB boot volume is enough to begin testing this app, subject to available capacity and measured load. This recommendation is an engineering judgment, not a provider uptime guarantee. Oracle's current A1 allowance is 1,500 OCPU hours and 9,000 GB hours/month (2 OCPUs / 12 GB equivalent), with 200 GB combined boot/block storage. Keep all resources inside the displayed Always Free allowance; trial credits expire and paid resources can incur charges. Signup may require card/phone verification. Capacity shortages and reclamation of idle VMs can interrupt service, so maintain off-host backups.
 
 Source: [Oracle Always Free resource limits](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm), [Oracle Free Tier FAQ](https://www.oracle.com/cloud/free/faq/).
 
-Render's free service loses local SQLite data when its ephemeral filesystem resets, and free persistent disks are unavailable. Its free Postgres expires after 30 days. It cannot safely host this implementation unchanged. [Render free-service limitations](https://render.com/docs/free).
+Render's free service loses local SQLite data when its ephemeral filesystem resets, and free persistent disks are unavailable. Its free Postgres expires after 30 days. The selected route now uses external Neon PostgreSQL through the app's new DATABASE_URL support. [Render free-service limitations](https://render.com/docs/free).
 
 PythonAnywhere's free plan can support a small manual pilot, but new free accounts have no scheduled tasks and the provider discourages SQLite for production. That leaves the automatic notification worker unresolved. [Free account features](https://help.pythonanywhere.com/pages/FreeAccountsFeatures/), [database guidance](https://help.pythonanywhere.com/pages/KindsOfDatabases). A static host alone cannot run this backend.
 
@@ -66,6 +70,6 @@ Follow WHATSAPP_ARCHITECTURE.md. Set all five Meta values only in the private se
 
 ## Current readiness
 
-Source is ready for operator deployment and acceptance testing for a small single-church installation. The production entrypoint, secure-origin/cookie checks, server-side teacher restrictions, notification safety and consistent SQLite backup were locally verified. There are 23 passing backend tests and four passing Chromium workflows. No blanket production certification is claimed.
+Source is ready for operator deployment and acceptance testing for a small single-church installation. The production entrypoint, secure-origin/cookie checks, server-side teacher restrictions, notification safety and consistent SQLite backup were locally verified. There are 24 passing local backend tests and four passing Chromium workflows. No blanket production certification is claimed.
 
 Still required before real use: configure the VM and HTTPS hostname, use a fresh production database and private administrator credentials, install the worker timer, schedule protected off-host backups, test restore and monitor the service. Live WhatsApp additionally requires Meta credentials, approved templates, real consent, and provider/webhook acceptance testing. Linux service installation and Docker were prepared but not executed on this Windows host. Source was published through local Git to https://github.com/samuelenoh/sabbath-school-app. This publishes the code only; no cloud deployment has occurred.

@@ -28,7 +28,7 @@ class WSGIHandler(server.Handler):
 def create_application():
     server.validate_configuration(hosted=True)
     server.initialize(False)
-    expected_host=urlparse(os.environ['SSMS_ORIGIN']).netloc.lower()
+    expected_host=urlparse(server.configured_origin()).netloc.lower()
     def app(environ,start_response):
         h=WSGIHandler(environ)
         host=environ.get('HTTP_HOST',environ.get('SERVER_NAME','')).lower()

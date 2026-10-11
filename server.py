@@ -1,6 +1,6 @@
-"""Sabbath School Management System — Python 3.10+, standard library only."""
+"""Sabbath School Management System — Python 3.10+, SQLite or PostgreSQL."""
 import argparse, csv, hashlib, hmac, io, json, os, re, secrets, sqlite3, time
-from contextlib import contextmanager
+from database import connection, is_postgres
 from datetime import date, datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -9,12 +9,15 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
 ROOT = Path(__file__).parent
-DB = os.environ.get('SSMS_DB', str(ROOT / 'data' / 'ssms.sqlite3'))
+DB = os.environ.get('DATABASE_URL') or os.environ.get('SSMS_DB', str(ROOT / 'data' / 'ssms.sqlite3'))
 ROLES = ('admin', 'secretary', 'teacher', 'treasurer', 'viewer')
 MODULES = ('classes', 'members', 'lessons', 'offerings', 'events', 'outreach')
 WRITE = {'classes': ('admin','secretary'), 'members': ('admin','secretary'),
          'lessons': ('admin','secretary','teacher'), 'offerings': ('admin','treasurer'),
          'events': ('admin','secretary'), 'outreach': ('admin','secretary','teacher')}
+
+def configured_origin():
+    return os.environ.get('SSMS_ORIGIN') or os.environ.get('RENDER_EXTERNAL_URL','')
 
 def production():
     return os.environ.get('SSMS_ENV', 'development') == 'production'
@@ -31,22 +34,21 @@ def validate_configuration(demo=False, hosted=False):
     if hosted and not production(): raise RuntimeError('The hosted WSGI entrypoint requires SSMS_ENV=production.')
     if production():
         if demo: raise RuntimeError('Demo mode is prohibited in production.')
-        if not os.environ.get('SSMS_DB') or not Path(DB).is_absolute(): raise RuntimeError('Production requires an explicit absolute SSMS_DB path on persistent storage.')
-        origin=os.environ.get('SSMS_ORIGIN','');parsed=urlparse(origin)
+        if is_postgres(DB):
+            db_url=urlparse(DB)
+            if not db_url.hostname or not db_url.username or not db_url.password or not db_url.path.strip('/'):
+                raise RuntimeError('DATABASE_URL must identify your database, user and password.')
+            if parse_qs(db_url.query).get('sslmode',[''])[0] not in ('require','verify-ca','verify-full'):
+                raise RuntimeError('Production PostgreSQL requires SSL in DATABASE_URL.')
+        elif not os.environ.get('SSMS_DB') or not Path(DB).is_absolute():
+            raise RuntimeError('Production requires DATABASE_URL or an explicit absolute SSMS_DB on persistent storage.')
+        origin=configured_origin();parsed=urlparse(origin)
         if parsed.scheme!='https' or not parsed.netloc or parsed.path or parsed.query or parsed.fragment or parsed.username:
             raise RuntimeError('SSMS_ORIGIN must be your exact HTTPS origin without a trailing slash.')
         if os.environ.get('SSMS_SECURE_COOKIES')!='1': raise RuntimeError('Production requires SSMS_SECURE_COOKIES=1.')
 
-@contextmanager
 def connect():
-    c = sqlite3.connect(DB, timeout=15)
-    c.row_factory = sqlite3.Row
-    c.execute('PRAGMA foreign_keys=ON')
-    try:
-        with c:
-            yield c
-    finally:
-        c.close()
+    return connection(DB)
 
 def password_hash(password, salt=None):
     salt = salt or secrets.token_hex(16)
@@ -65,7 +67,7 @@ def now():
 
 def initialize(demo=False):
     validate_configuration(demo)
-    Path(DB).parent.mkdir(parents=True, exist_ok=True)
+    if not is_postgres(DB): Path(DB).parent.mkdir(parents=True, exist_ok=True)
     with connect() as c:
         c.executescript('''
         PRAGMA journal_mode=WAL;
@@ -355,7 +357,7 @@ class Handler(BaseHTTPRequestHandler):
         path=urlparse(self.path).path; query=parse_qs(urlparse(self.path).query)
         try:
             if production() and path.startswith('/api/') and method!='GET':
-                if not hmac.compare_digest(self.headers.get('Origin',''),os.environ.get('SSMS_ORIGIN','')):
+                if not hmac.compare_digest(self.headers.get('Origin',''),configured_origin()):
                     raise PermissionError('This request must come from the configured church app origin.')
             if path=='/webhooks/whatsapp': return self.webhook(method,query)
             if path=='/healthz' and method=='GET':
