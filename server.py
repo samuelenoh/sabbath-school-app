@@ -1,6 +1,8 @@
 """Sabbath School Management System — Python 3.10+, SQLite or PostgreSQL."""
 import argparse, csv, hashlib, hmac, io, json, os, re, secrets, sqlite3, time
 from database import connection, is_postgres
+from annual_report import build_annual_report
+from programme import default_template, assignment_fingerprint, assignment_previews
 from datetime import date, datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -11,10 +13,11 @@ from urllib.error import HTTPError, URLError
 ROOT = Path(__file__).parent
 DB = os.environ.get('DATABASE_URL') or os.environ.get('SSMS_DB', str(ROOT / 'data' / 'ssms.sqlite3'))
 ROLES = ('admin', 'secretary', 'teacher', 'treasurer', 'viewer')
-MODULES = ('classes', 'members', 'lessons', 'offerings', 'events', 'outreach')
+MODULES = ('classes', 'members', 'lessons', 'offerings', 'events', 'outreach', 'bookorders', 'programmes')
 WRITE = {'classes': ('admin','secretary'), 'members': ('admin','secretary'),
          'lessons': ('admin','secretary','teacher'), 'offerings': ('admin','treasurer'),
-         'events': ('admin','secretary'), 'outreach': ('admin','secretary','teacher')}
+         'events': ('admin','secretary'), 'outreach': ('admin','secretary','teacher'),
+         'bookorders': ('admin','secretary','teacher'), 'programmes': ('admin','secretary')}
 
 def configured_origin():
     return os.environ.get('SSMS_ORIGIN') or os.environ.get('RENDER_EXTERNAL_URL','')
@@ -90,6 +93,7 @@ def initialize(demo=False):
         CREATE TABLE IF NOT EXISTS delivery_events(provider_id TEXT, status TEXT, received TEXT,
           PRIMARY KEY(provider_id,status));
         ''')
+        c.execute('INSERT OR IGNORE INTO settings(name,value) VALUES(?,?)',('programme_template',json.dumps(default_template())))
         demo_flag=c.execute("SELECT value FROM settings WHERE name='demo_database'").fetchone()
         if not demo_flag and c.execute('SELECT id FROM users LIMIT 1').fetchone():
             legacy_demo=c.execute("SELECT id FROM users WHERE email IN ('teacher@ssms.local','teacher2@ssms.local')").fetchone()
@@ -172,18 +176,24 @@ def validate(c, module, data, user, existing=None):
     d={}
     if module=='classes':
         for k in ('name','description','age_group','room'): d[k]=text_field(data,k,k=='name',200 if k!='description' else 2000)
-        d['teacher_id']=positive_id(data,'teacher_id')
-        if not c.execute("SELECT id FROM users WHERE id=? AND role='teacher' AND active=1",(d['teacher_id'],)).fetchone(): raise ValueError('Assign an active teacher.')
+        d['class_code']=text_field({'class_code':data.get('class_code',(existing or {}).get('class_code',''))},'class_code',False,20)
+        d['teacher_id']=positive_id(data,'teacher_id',False)
+        if d['teacher_id'] is not None and not c.execute("SELECT id FROM users WHERE id=? AND role='teacher' AND active=1",(d['teacher_id'],)).fetchone(): raise ValueError('Assign an active teacher.')
         d['active']=bool_field(data,'active',True)
     elif module=='members':
         for k in ('name','phone','email','notes'): d[k]=text_field(data,k,k=='name')
+        d['phone_local']=text_field({'phone_local':data.get('phone_local',(existing or {}).get('phone_local',''))},'phone_local',False,40)
+        d['residence']=text_field({'residence':data.get('residence',(existing or {}).get('residence',''))},'residence',False,200)
+        d['class_office']=data.get('class_office',(existing or {}).get('class_office',''))
+        if d['class_office'] not in ('','H.T','A.T','C.O','SEC'): raise ValueError('Choose a valid class-office label.')
         if d['phone'] and not re.fullmatch(r'\+[1-9]\d{7,14}',d['phone']): raise ValueError('Phone must use international format, e.g. +233201234567.')
         if d['email'] and not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',d['email']): raise ValueError('Enter a valid email address.')
         d['class_id']=positive_id(data,'class_id'); record(c,d['class_id'],'classes')
         d['status']=data.get('status','Active')
         if d['status'] not in ('Active','Inactive','Visitor'): raise ValueError('Invalid member status.')
         d['birthday']=iso_day(data['birthday']) if data.get('birthday') else ''
-        d['joined_on']=iso_day(data.get('joined_on') or utc_today().isoformat())
+        d['joined_on_unknown']=bool_field(data,'joined_on_unknown',(existing or {}).get('joined_on_unknown',False))
+        d['joined_on']='' if d['joined_on_unknown'] else iso_day(data.get('joined_on') or utc_today().isoformat())
         d['whatsapp_opt_in']=bool_field(data,'whatsapp_opt_in')
         if d['whatsapp_opt_in'] and not d['phone']: raise ValueError('WhatsApp consent requires a phone number.')
         if existing and existing.get('phone')!=d['phone'] and existing.get('whatsapp_opt_in') and d['whatsapp_opt_in']:
@@ -203,14 +213,40 @@ def validate(c, module, data, user, existing=None):
     elif module=='offerings':
         d['day']=iso_day(data.get('day')); d['class_id']=positive_id(data,'class_id'); record(c,d['class_id'],'classes')
         d['amount_minor']=data.get('amount_minor')
-        if type(d['amount_minor']) is not int or not 0<d['amount_minor']<=100000000: raise ValueError('Amount must be positive and at most 1,000,000.')
+        if type(d['amount_minor']) is not int or not (0 if data.get('category')=='Class contribution' else 1)<=d['amount_minor']<=100000000: raise ValueError('Amount must be at most 1,000,000; only class contributions may be zero.')
         d['currency']=text_field(data,'currency',True,3).upper()
         if not re.fullmatch('[A-Z]{3}',d['currency']): raise ValueError('Use a three-letter currency code.')
         d['category']=data.get('category')
-        if d['category'] not in ('Sabbath School','Mission','Thirteenth Sabbath','Other'): raise ValueError('Invalid offering category.')
-        d['notes']=text_field(data,'notes'); d['receipt']=text_field(data,'receipt',True,100)
+        if d['category'] not in ('Sabbath School','Mission','Thirteenth Sabbath','Other','Class contribution'): raise ValueError('Invalid offering category.')
+        d['notes']=text_field(data,'notes')
+        if d['category']=='Class contribution':
+            if date.fromisoformat(d['day']).weekday()!=5 or d['day']>utc_today().isoformat():
+                raise ValueError('Class contributions require a past or current Sabbath (Saturday).')
+            if any(r['category']=='Class contribution' and r['class_id']==d['class_id'] and r['day']==d['day'] and r['id']!=(existing or {}).get('id') for r in records(c,'offerings')):
+                raise ValueError('This class already has a contribution for this Sabbath. Edit that record instead.')
+        d['receipt']=text_field(data,'receipt',False,100)
+        if not d['receipt'] and d['category']=='Class contribution': d['receipt']=f'CC-{d["class_id"]}-{d["day"]}'
+        if not d['receipt']: raise ValueError('Enter a receipt reference.')
         for r in records(c,'offerings'):
             if r['receipt']==d['receipt'] and r['id']!=(existing or {}).get('id'): raise ValueError('Receipt reference already exists.')
+    elif module=='bookorders':
+        d['class_id']=positive_id(data,'class_id'); record(c,d['class_id'],'classes')
+        for key,minimum,maximum in (('year',2000,2100),('quarter',1,4),('quantity',1,10000)):
+            value=data.get(key)
+            if type(value) is not int or not minimum<=value<=maximum:
+                raise ValueError(f'{key}: use a whole number from {minimum} to {maximum}.')
+            d[key]=value
+        d['book_title']=text_field(data,'book_title',True,200)
+        d['notes']=text_field(data,'notes')
+        d['status']=data.get('status','Requested')
+        if d['status'] not in ('Requested','Ordered','Received','Distributed','Cancelled'): raise ValueError('Choose a valid book-order status.')
+        if user['role']=='teacher':
+            allowed_class(c,user,d['class_id'])
+            if existing: allowed_class(c,user,existing['class_id'])
+            if d['status'] not in ('Requested','Cancelled') or (existing and existing['status'] not in ('Requested','Cancelled')):
+                raise PermissionError('Teachers can manage their own requested or cancelled orders; staff track fulfilment.')
+        if any(r['class_id']==d['class_id'] and r['year']==d['year'] and r['quarter']==d['quarter'] and r['book_title'].casefold()==d['book_title'].casefold() and r['id']!=(existing or {}).get('id') for r in records(c,'bookorders')):
+            raise ValueError('This class already has an order for this book and quarter. Edit the existing order.')
     elif module=='events':
         for k in ('title','time','location','description'): d[k]=text_field(data,k,k=='title')
         d['day']=iso_day(data.get('day'))
@@ -231,7 +267,59 @@ def validate(c, module, data, user, existing=None):
         if user['role']=='teacher':
             allowed_class(c,user,d['class_id'])
             if existing: allowed_class(c,user,existing['class_id'])
+    elif module=='programmes':
+        d['day']=iso_day(data.get('day'))
+        if date.fromisoformat(d['day']).weekday()!=5: raise ValueError('Choose a Sabbath (Saturday).')
+        if any(p['day']==d['day'] and p['id']!=(existing or {}).get('id') for p in records(c,'programmes')):
+            raise ValueError('A programme already exists for this Sabbath. Edit it instead.')
+        d['title']=text_field(data,'title',True,200)
+        d['status']=data.get('status','Planned')
+        if d['status'] not in ('Planned','Completed','Cancelled'): raise ValueError('Choose a valid programme status.')
+        d['items']=validate_programme_items(c,data.get('items'),False,existing)
+        if d['day']>utc_today().isoformat() and (d['status']=='Completed' or any(i['status']=='Completed' for i in d['items'])):
+            raise ValueError('Record completion after the activity has taken place.')
+        if d['status']=='Completed' and any(i['status']=='Planned' for i in d['items']):
+            raise ValueError('Mark each activity completed or skipped before completing the programme.')
+        d['notes']=text_field(data,'notes')
+        d['template_version']= (existing or {}).get('template_version',data.get('template_version',0))
+        if type(d['template_version']) is not int or d['template_version']<0: raise ValueError('Invalid template version.')
     return d
+
+def validate_programme_items(c,items,template=False,existing=None):
+    if not isinstance(items,list) or not 1<=len(items)<=50: raise ValueError('Use between 1 and 50 programme activities.')
+    cleaned=[];seen=set(); old={i['key']:i for i in (existing or {}).get('items',[])}
+    for item in items:
+        if not isinstance(item,dict): raise ValueError('Invalid programme activity.')
+        key=text_field(item,'key',True,60)
+        if not re.fullmatch(r'[a-zA-Z0-9_-]+',key) or key in seen: raise ValueError('Use unique activity keys.')
+        seen.add(key);label=text_field(item,'label',True,200);time_value=text_field(item,'time',False,5)
+        if time_value and not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',time_value): raise ValueError('Activity time must use HH:MM.')
+        mids=item.get('member_ids',[])
+        if not isinstance(mids,list) or len(mids)>30 or len(set(mids))!=len(mids) or any(type(mid) is not int or mid<1 for mid in mids):
+            raise ValueError('Choose up to 30 distinct member facilitators.')
+        names=[]
+        for mid in mids:
+            member=record(c,mid,'members')
+            if member['status']=='Inactive' and mid not in old.get(key,{}).get('member_ids',[]): raise ValueError('New assignments require an active member or visitor.')
+            # Preserve the historic name for unchanged assignments; new ones resolve server-side.
+            previous=old.get(key,{})
+            names.append(previous.get('responsible_names',[])[previous['member_ids'].index(mid)] if mid in previous.get('member_ids',[]) else member['name'])
+        status='Planned' if template else item.get('status','Planned')
+        if status not in ('Planned','Completed','Skipped'): raise ValueError('Invalid activity status.')
+        cleaned.append({'key':key,'label':label,'time':time_value,'member_ids':mids,'responsible_names':names,'status':status,'notes':'' if template else text_field(item,'notes')})
+    return cleaned
+
+def programme_message_current(c,msg):
+    if not msg['dedupe'].startswith('programme:'): return True
+    _,pid,fingerprint,mid=msg['dedupe'].split(':')
+    try: p=record(c,int(pid),'programmes')
+    except ValueError: return False
+    return p['status']!='Cancelled' and p['day']>=utc_today().isoformat() and fingerprint==assignment_fingerprint(p) and any(int(mid) in i['member_ids'] for i in p['items'])
+
+def cancel_stale_programme_messages(c,pid):
+    for msg in c.execute("SELECT * FROM messages WHERE status='queued' AND dedupe LIKE ?",(f'programme:{pid}:%',)).fetchall():
+        if not programme_message_current(c,msg):
+            c.execute("UPDATE messages SET status='cancelled',error='Programme assignment changed, cancelled or expired',updated=? WHERE id=?",(now(),msg['id']))
 
 def queue_message(c, member, template, language, parameters, dedupe):
     if not member.get('whatsapp_opt_in') or member.get('status')=='Inactive' or not member.get('phone'): return False
@@ -279,6 +367,9 @@ def process_queue(limit=20):
             msg=c.execute("SELECT * FROM messages WHERE status='queued' AND next_attempt<=? ORDER BY id LIMIT 1",(time.time(),)).fetchone()
             if not msg: break
             m=record(c,msg['member_id'],'members')
+            if not programme_message_current(c,msg):
+                c.execute("UPDATE messages SET status='cancelled',error='Programme assignment changed, cancelled or expired',updated=? WHERE id=?",(now(),msg['id']))
+                continue
             if not m.get('whatsapp_opt_in') or m.get('status')=='Inactive' or not m.get('phone'):
                 c.execute("UPDATE messages SET status='cancelled',error='Consent withdrawn or recipient unavailable',updated=? WHERE id=?",(now(),msg['id']))
                 continue
@@ -365,7 +456,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200,{'status':'ok'})
             if not path.startswith('/api/'):
                 if method!='GET': return self.send(405,{'error':'Method not allowed.'})
-                files={'/':('index.html','text/html'),'/app.js':('app.js','application/javascript'),'/style.css':('style.css','text/css')}
+                files={'/':('index.html','text/html'),'/app.js':('app.js','application/javascript'),'/style.css':('style.css','text/css'),**{'/'+name:(name,'application/javascript') for name in ('class-records.js','annual-report.js','programme.js','roster-import.js')}}
                 if path not in files: return self.send(404,{'error':'Not found.'})
                 f,ct=files[path]; return self.send(200,raw=(ROOT/'static'/f).read_bytes(),content_type=ct)
             with connect() as c:
@@ -409,7 +500,7 @@ class Handler(BaseHTTPRequestHandler):
                     if role=='teacher':
                         ids={r['id'] for r in data['classes'] if r['teacher_id']==uid}
                         data['classes']=[r for r in data['classes'] if r['id'] in ids]
-                        for m in ('members','lessons','outreach'): data[m]=[r for r in data[m] if r.get('class_id') in ids]
+                        for m in ('members','lessons','outreach','bookorders'): data[m]=[r for r in data[m] if r.get('class_id') in ids]
                     if role not in ('admin','secretary','treasurer'): data['offerings']=[]
                     users=[dict(r) for r in c.execute('SELECT id,name,email,role,active FROM users ORDER BY name')]
                     if role!='admin': users=[{k:r[k] for k in ('id','name','role','active')} for r in users]
@@ -419,7 +510,56 @@ class Handler(BaseHTTPRequestHandler):
                       messages=[dict(r) for r in c.execute('SELECT * FROM messages ORDER BY id DESC LIMIT 200')] if role in ('admin','secretary') else [],
                       rules=[dict(r) for r in c.execute('SELECT * FROM rules')] if role in ('admin','secretary') else [],
                       audit=[dict(r) for r in c.execute('SELECT a.*,u.name AS actor_name FROM audit a LEFT JOIN users u ON u.id=a.actor ORDER BY a.id DESC LIMIT 100')] if role=='admin' else [],
+                      programme_template=json.loads(c.execute("SELECT value FROM settings WHERE name='programme_template'").fetchone()['value']),
                       whatsapp={'mode':os.environ.get('WHATSAPP_MODE','dry_run'),'configured':all(os.environ.get(k) for k in ('META_ACCESS_TOKEN','META_PHONE_NUMBER_ID','META_GRAPH_VERSION','META_APP_SECRET','META_VERIFY_TOKEN'))}))
+                if path in ('/api/members/import-preview','/api/members/import') and method=='POST':
+                    if role not in ('admin','secretary'): raise PermissionError('Roster import is restricted.')
+                    from import_roster import prepare_import
+                    c.execute('BEGIN IMMEDIATE');d=self.body();cid=positive_id(d,'class_id');rows=d.get('rows')
+                    if not isinstance(rows,list) or not 1<=len(rows)<=500 or any(not isinstance(r,dict) for r in rows): raise ValueError('Supply between 1 and 500 reviewed roster rows.')
+                    plan=prepare_import(c,rows,cid);fingerprint=hashlib.sha256(json.dumps(plan,sort_keys=True).encode()).hexdigest()
+                    if path.endswith('import-preview'): return self.send(200,{'plan':plan,'fingerprint':fingerprint})
+                    if not isinstance(d.get('fingerprint'),str) or not hmac.compare_digest(d['fingerprint'],fingerprint): return self.send(409,{'error':'Roster or database changed. Preview again before importing.'})
+                    if any(r['action']=='review_conflict' for r in plan): raise ValueError('Resolve conflicting rows before importing; no members were changed.')
+                    inserted=skipped=0
+                    for item in plan:
+                        if item['action']=='insert':
+                            c.execute('INSERT INTO records(module,data) VALUES(?,?)',('members',json.dumps(item['data'])));inserted+=1
+                        else: skipped+=1
+                    audit(c,uid,'members.roster_import',{'class_id':cid,'inserted':inserted,'skipped':skipped});c.commit();return self.send(200,{'inserted':inserted,'skipped':skipped})
+                if path=='/api/programme-template' and method=='PUT':
+                    if role not in ('admin','secretary'): raise PermissionError('Programme management is restricted.')
+                    c.execute('BEGIN IMMEDIATE');d=self.body()
+                    old=json.loads(c.execute("SELECT value FROM settings WHERE name='programme_template'").fetchone()['value'])
+                    if d.get('version')!=old['version']: return self.send(409,{'error':'Template changed. Refresh before editing.'})
+                    clean={'name':text_field(d,'name',True,200),'version':old['version']+1,'items':validate_programme_items(c,d.get('items'),True,old)}
+                    c.execute("UPDATE settings SET value=? WHERE name='programme_template'",(json.dumps(clean),));audit(c,uid,'programme.template.save',{'version':clean['version']});c.commit();return self.send(200,clean)
+                if path=='/api/programmes/instantiate' and method=='POST':
+                    if role not in ('admin','secretary'): raise PermissionError('Programme management is restricted.')
+                    c.execute('BEGIN IMMEDIATE');d=self.body();template=json.loads(c.execute("SELECT value FROM settings WHERE name='programme_template'").fetchone()['value'])
+                    clean=validate(c,'programmes',{'day':d.get('day'),'title':template['name'],'items':template['items'],'template_version':template['version']},user)
+                    ident=c.execute('INSERT INTO records(module,data) VALUES(?,?)',('programmes',json.dumps(clean))).lastrowid
+                    audit(c,uid,'programmes.instantiate',{'id':ident,'day':clean['day'],'template_version':template['version']});c.commit();return self.send(201,{'id':ident})
+                if re.fullmatch(r'/api/programmes/\d+/assignments',path) and method in ('GET','POST'):
+                    if role not in ('admin','secretary'): raise PermissionError('Assignment notifications are restricted.')
+                    if method=='POST': c.execute('BEGIN IMMEDIATE')
+                    p=record(c,int(path.split('/')[3]),'programmes');preview=assignment_previews(p,records(c,'members'));fingerprint=assignment_fingerprint(p)
+                    for item in preview:
+                        msg=c.execute('SELECT id,status,error FROM messages WHERE dedupe=?',(f"programme:{p['id']}:{fingerprint}:{item['member_id']}",)).fetchone()
+                        item['notification']=dict(msg) if msg else {'status':'draft'}
+                    if method=='GET': return self.send(200,{'programme_id':p['id'],'version':p['version'],'recipients':preview})
+                    d=self.body()
+                    if d.get('version')!=p['version']: return self.send(409,{'error':'Assignments changed. Refresh and review before queuing.'})
+                    if p['status']=='Cancelled' or p['day']<utc_today().isoformat(): raise ValueError('Queue assignments only for a current or future programme.')
+                    template=text_field(d,'template',True,100);language=text_field(d,'language',True,20);self.validate_template(template,language,[])
+                    queued=skipped=duplicate=0
+                    for item in preview:
+                        if not item['eligible']: skipped+=1;continue
+                        self.validate_template(template,language,item['parameters'])
+                        key=f"programme:{p['id']}:{fingerprint}:{item['member_id']}"
+                        if c.execute('SELECT id FROM messages WHERE dedupe=?',(key,)).fetchone(): duplicate+=1;continue
+                        member=record(c,item['member_id'],'members');queue_message(c,member,template,language,item['parameters'],key);queued+=1
+                    audit(c,uid,'programme.assignments.queue',{'programme_id':p['id'],'queued':queued,'skipped':skipped,'duplicates':duplicate});c.commit();return self.send(200,{'queued':queued,'skipped':skipped,'duplicates':duplicate})
                 if path=='/api/attendance' and method=='POST':
                     d=self.body(); c.execute('BEGIN IMMEDIATE');cid=positive_id(d,'class_id');allowed_class(c,user,cid)
                     day=iso_day(d.get('day'))
@@ -441,18 +581,68 @@ class Handler(BaseHTTPRequestHandler):
                                   (cid,mid,day,e['status'],int(e.get('study',False)),notes,uid,now()))
                     audit(c,uid,'attendance.save',{'class_id':cid,'day':day,'count':len(entries)});c.commit()
                     return self.send(200,{'saved':len(entries)})
+                if path=='/api/reports/annual' and method=='GET':
+                    if role=='teacher': raise PermissionError('The department report requires department-wide access.')
+                    try: year=int(query.get('year',[str(utc_today().year)])[0])
+                    except ValueError: raise ValueError('Choose a valid report year.')
+                    if not 2000<=year<=2100: raise ValueError('Choose a year from 2000 to 2100.')
+                    data={m:records(c,m) for m in MODULES}
+                    report=build_annual_report(data,[dict(r) for r in c.execute('SELECT * FROM attendance')],year,role in ('admin','secretary','treasurer'))
+                    return self.send(200,report)
                 if path=='/api/reports.csv' and method=='GET':
                     kind=query.get('kind',['attendance'])[0]; start=iso_day(query.get('start',['2000-01-01'])[0]);end=iso_day(query.get('end',[utc_today().isoformat()])[0])
                     if start>end: raise ValueError('Start date must precede end date.')
                     out=io.StringIO(); writer=csv.writer(out)
                     def safe(v):
                         s=str(v);return "'"+s if s.startswith(('=','+','-','@','\t','\r')) else s
-                    if kind=='offerings':
+                    if kind=='annual':
+                        if role=='teacher': raise PermissionError('The department report requires department-wide access.')
+                        try: year=int(query.get('year',[str(utc_today().year)])[0])
+                        except ValueError: raise ValueError('Choose a valid report year.')
+                        if not 2000<=year<=2100: raise ValueError('Choose a year from 2000 to 2100.')
+                        report=build_annual_report({m:records(c,m) for m in MODULES},[dict(r) for r in c.execute('SELECT * FROM attendance')],year,role in ('admin','secretary','treasurer'))
+                        writer.writerow(['Section / metric','Value'])
+                        def flatten(value,prefix=''):
+                            if isinstance(value,dict):
+                                for key,item in value.items(): flatten(item,f'{prefix}.{key}' if prefix else key)
+                            elif isinstance(value,list):
+                                for index,item in enumerate(value,1): flatten(item,f'{prefix}.{index}')
+                            else: writer.writerow([safe(prefix),safe('Not available' if value is None else value)])
+                        flatten(report)
+                    elif kind in ('offerings','contributions'):
                         if role not in ('admin','secretary','treasurer'): raise PermissionError('Financial reports are restricted.')
                         writer.writerow(['Date','Class','Category','Amount','Currency','Receipt'])
                         classes={r['id']:r['name'] for r in records(c,'classes')}
+                        cid=query.get('class_id',[''])[0]
+                        if cid:
+                            try: cid=int(cid)
+                            except ValueError: raise ValueError('Invalid class filter.')
+                            record(c,cid,'classes')
                         for r in records(c,'offerings'):
-                            if start<=r['day']<=end: writer.writerow([safe(v) for v in (r['day'],classes.get(r['class_id'],'Archived'),r['category'],f'{r["amount_minor"]/100:.2f}',r['currency'],r['receipt'])])
+                            if cid and r['class_id']!=cid: continue
+                            if start<=r['day']<=end and (kind!='contributions' or r['category']=='Class contribution'): writer.writerow([safe(v) for v in (r['day'],classes.get(r['class_id'],'Archived'),r['category'],f'{r["amount_minor"]/100:.2f}',r['currency'],r['receipt'])])
+                    elif kind=='bookorders':
+                        filters={}
+                        for key,minimum,maximum in (('year',2000,2100),('quarter',1,4)):
+                            if query.get(key,[''])[0]:
+                                try: value=int(query[key][0])
+                                except ValueError: raise ValueError('Invalid book-order filter.')
+                                if not minimum<=value<=maximum: raise ValueError('Invalid book-order filter.')
+                                filters[key]=value
+                        cid=query.get('class_id',[''])[0]
+                        if cid:
+                            try: filters['class_id']=int(cid)
+                            except ValueError: raise ValueError('Invalid class filter.')
+                            record(c,filters['class_id'],'classes')
+                            if role=='teacher': allowed_class(c,user,filters['class_id'])
+                        status=query.get('status',[''])[0]
+                        if status and status not in ('Requested','Ordered','Received','Distributed','Cancelled'): raise ValueError('Invalid status filter.')
+                        classes={r['id']:r for r in records(c,'classes')}
+                        writer.writerow(['Class','Year','Quarter','Book','Quantity','Status','Notes'])
+                        for r in records(c,'bookorders'):
+                            if role=='teacher' and classes[r['class_id']]['teacher_id']!=uid: continue
+                            if any(r[k]!=v for k,v in filters.items()) or (status and r['status']!=status): continue
+                            writer.writerow([safe(v) for v in (classes[r['class_id']]['name'],r['year'],r['quarter'],r['book_title'],r['quantity'],r['status'],r['notes'])])
                     elif kind=='attendance':
                         writer.writerow(['Date','Class','Member','Status','Studied lesson','Marked by'])
                         members={r['id']:r for r in records(c,'members')}; classes={r['id']:r for r in records(c,'classes')};users={r['id']:r['name'] for r in c.execute('SELECT id,name FROM users')}
@@ -534,7 +724,7 @@ class Handler(BaseHTTPRequestHandler):
                         regs.append(mid)
                     e['registrations']=regs;e.pop('id');e.pop('version')
                     c.execute('UPDATE records SET data=?,version=version+1 WHERE id=?',(json.dumps(e),cid));audit(c,uid,'event.registration',{'event_id':cid,'member_id':mid,'cancel':cancel});c.commit();return self.send(200,{'ok':True})
-                match=re.fullmatch(r'/api/(classes|members|lessons|offerings|events|outreach)(?:/(\d+))?',path)
+                match=re.fullmatch(r'/api/(classes|members|lessons|offerings|events|outreach|bookorders|programmes)(?:/(\d+))?',path)
                 if match and method in ('POST','PUT','DELETE'):
                     module,ident=match.groups()
                     if role not in WRITE[module]: raise PermissionError('Your role cannot change this module.')
@@ -543,12 +733,15 @@ class Handler(BaseHTTPRequestHandler):
                     if method=='DELETE':
                         if not ident: raise ValueError('Record ID required.')
                         if role=='teacher': allowed_class(c,user,existing['class_id'])
+                        if module=='programmes': raise ValueError('Retain weekly history. Set the programme to Cancelled instead.')
                         if module=='members':
-                            if c.execute('SELECT 1 FROM attendance WHERE member_id=? UNION SELECT 1 FROM messages WHERE member_id=?',(ident,ident)).fetchone() or any(int(ident) in e['registrations'] for e in records(c,'events')):
+                            if c.execute('SELECT 1 FROM attendance WHERE member_id=? UNION SELECT 1 FROM messages WHERE member_id=?',(ident,ident)).fetchone() or any(int(ident) in e['registrations'] for e in records(c,'events')) or any(int(ident) in i['member_ids'] for p in records(c,'programmes') for i in p['items']) or any(int(ident) in i['member_ids'] for i in json.loads(c.execute("SELECT value FROM settings WHERE name='programme_template'").fetchone()['value'])['items']):
                                 raise ValueError('Member has history. Set status to Inactive instead.')
                         if module=='classes':
-                            if any(r.get('class_id')==int(ident) for m in ('members','lessons','offerings','outreach') for r in records(c,m)) or c.execute('SELECT 1 FROM attendance WHERE class_id=?',(ident,)).fetchone():
+                            if any(r.get('class_id')==int(ident) for m in ('members','lessons','offerings','outreach','bookorders') for r in records(c,m)) or c.execute('SELECT 1 FROM attendance WHERE class_id=?',(ident,)).fetchone():
                                 raise ValueError('Class has related records. Set active to false instead.')
+                        if module=='bookorders' and existing['status'] not in ('Requested','Cancelled'):
+                            raise ValueError('Tracked orders have history. Set status to Cancelled instead of deleting.')
                         if module=='offerings' and role!='admin': raise PermissionError('Only administrators can delete financial records.')
                         c.execute('DELETE FROM records WHERE id=?',(ident,));audit(c,uid,module+'.delete',{'id':ident});c.commit();return self.send(200,{'ok':True})
                     if (method=='PUT')!=bool(ident): raise ValueError('Use POST to create or PUT with an ID to edit.')
@@ -557,8 +750,9 @@ class Handler(BaseHTTPRequestHandler):
                         if d.get('version')!=existing['version']: return self.send(409,{'error':'This record changed. Refresh before editing.'})
                         c.execute('UPDATE records SET data=?,version=version+1 WHERE id=?',(json.dumps(clean),ident))
                     else: ident=c.execute('INSERT INTO records(module,data) VALUES(?,?)',(module,json.dumps(clean))).lastrowid
+                    if module=='programmes': cancel_stale_programme_messages(c,ident)
                     detail={'id':ident}
-                    if module=='offerings': detail.update(before=existing,after=clean)
+                    if module in ('offerings','bookorders','programmes'): detail.update(before=existing,after=clean)
                     audit(c,uid,module+'.save',detail);c.commit();return self.send(200 if existing else 201,{'id':int(ident)})
                 return self.send(404,{'error':'Endpoint not found.'})
         except PermissionError as e: return self.send(401 if str(e)=='Sign in to continue.' else 403,{'error':str(e)})

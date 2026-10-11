@@ -53,7 +53,7 @@ python server.py
 ```
 
 1. Sign in as administrator and create teacher and operational accounts in **People & roles**.
-2. Create classes and assign an active teacher to each class. One teacher can teach multiple classes; each class has one primary teacher.
+2. Create classes and optionally assign an active teacher. Unassigned classes can hold members; only administrators and secretaries can mark their attendance until a teacher is assigned. One teacher can teach multiple classes; each class has one primary teacher.
 3. Add members to their classes. Enter international phone numbers and record consent only when a member has actually given it.
 4. Teachers sign in with their own accounts and mark attendance for a Saturday. They can read and manage lessons and outreach for their assigned classes.
 5. Record offerings, create events, register members, and use Reports for participation and CSV exports.
@@ -64,11 +64,15 @@ python server.py
 | Module | Behavior |
 |---|---|
 | Overview | Current roster, attendance rate, real recorded attendance trend, classes, upcoming events, outreach impact |
-| Members | Create/edit/search/filter, contact details, birthday, visitor/active/inactive status, class assignment, recorded WhatsApp consent |
-| Classes | Create/edit, primary teacher, age group, meeting space, active status; archive classes with history |
+| Members | Create/edit/search/filter, residence, printed class office and phone, reviewed CSV import, unknown join dates, contact details, birthday, visitor/active/inactive status, class assignment, recorded WhatsApp consent |
+| Classes | Create/edit, optional primary teacher, printed class code, age group, meeting space, active status; archive classes with history |
 | Attendance | Server-side assignment authorization, Saturday and future-date validation, present/absent/excused, study checkbox, notes, same-date updates, atomic batches |
 | Lesson study | Class-specific lesson title, quarter, week, scripture, discussion summary, HTTPS resource link; study completion via attendance |
 | Offerings | Integer minor-unit accounting (two decimal places), currency, category, receipt uniqueness, notes, audited corrections |
+| Class contributions | One whole-class total per Sabbath, zero totals, duplicate prevention, currency-separated quarterly register and filtered CSV; included once in Offerings |
+| Book orders | Per-class/year/quarter/book requests and Requested/Ordered/Received/Distributed/Cancelled tracking; teachers request for assigned classes, staff handle fulfilment |
+| Weekly programme | Saved editable 14-step local template, independent weekly copies, multiple member facilitators, local times, actual activity/completion notes, printable roster and targeted WhatsApp assignment previews |
+| Annual report | Selected-year whole-department membership, attendance/study, giving, books, programmes, events and outreach; class and quarterly breakdowns, print/PDF and CSV; contact and facilitator fields excluded |
 | Reports | Date filters, class participation, study and outreach statistics, currency-separated offering totals, attendance/offerings CSV, print view |
 | Events | Dates, time, location, description, capacity, idempotent member registration and cancellation |
 | Outreach | Activity, class, coordinator, date, status, people reached, care notes |
@@ -85,6 +89,10 @@ Financial totals are never combined across currencies. Currency codes assume two
 | Manage members/classes | Yes | Yes | No | No | No |
 | Mark attendance | All | All | Assigned classes | No | No |
 | Manage lessons/outreach | All | All | Assigned classes | No | No |
+| Manage book orders | Yes | Yes | Own requests before ordering | No | No |
+| Read weekly programme names (no extra contact access) | Yes | Yes | Yes | Yes | Yes |
+| Edit programme/template and queue assignments | Yes | Yes | No | No | No |
+| Read/export annual department report | Yes | Yes | No | Yes | Without finance |
 | Manage events | Yes | Yes | No | No | No |
 | Manage event registrations | All | All | Own roster | No | No |
 | Read/export offerings | Yes | Yes | No | Yes | No |
@@ -148,3 +156,17 @@ Use the same `SSMS_DB` as the server. Protect backups and database access with o
 See `WHATSAPP_ARCHITECTURE.md` for database, integration, worker scheduling, retries, and webhook setup. Default `WHATSAPP_MODE=dry_run` never calls Meta. Live operation requires your Meta business account, phone-number ID, access token, Graph API version, app secret, verification token, approved message templates, public HTTPS webhook, and a scheduled backend worker. No live delivery or real credentials were tested.
 
 There is no unofficial WhatsApp Web automation, group broadcast shortcut, or credentials in the frontend. Each consenting member gets an individual template message through Meta's official Cloud API. This implementation supports text body parameters; templates requiring header media, buttons or additional component types require adapter extensions.
+
+## Church registers, programme and annual reporting
+
+The photographed Q3 2026 forms inform residence, class-office labels (H.T, A.T, C.O/CO, SEC), class codes and printable quarterly grids. Office labels do not grant account permissions. Missing attendance is not assumed absent; missing contribution totals are not assumed zero. Print quarterly registers in landscape for legibility. Handwritten dates, marks, amounts and camp-meeting annotations are not automatically imported.
+
+Use **Members → Import reviewed roster** after creating or choosing the destination class. Paste a private CSV with `name,residence,phone_local,class_office,notes` headers; preview and resolve conflicts, then import. Exact matches on class/name/normalized phone are skipped, while changed residence/office/source phone or ambiguous name/phone matches block the whole batch. Leading zeroes remain in the printed-phone field; Ghana local numbers are normalized to +233 for possible future messaging. Import creates member records with unknown join dates and no WhatsApp consent, not login accounts. Review source notes and correct uncertain spellings without guessing. Private source files, previews and databases are excluded from Git and the source ZIP.
+
+A CLI alternative is `python import_roster.py /private/roster.csv --class-id 1 --preview-file /private/preview.json`. Review the preview before adding `--apply`; configure the intended database explicitly, back it up, stop the app for a CLI import, and use an existing class ID. No import runs automatically at startup.
+
+Use **Weekly programme → Edit reusable template** to save the local order: Into My Heart/prayer; introduction of facilitators; opening hymn; opening prayer; welcome song; special song; mission reading; Sabbath School retrospect; dispersal into classes; reassembly/questions and contributions; Friend for the Year, Read a Chapter a Day, and Gethsemane Hour; secretary report; closing hymn; closing prayer. Labels, order, times and default facilitators are editable. Create a separate week for a selected Saturday; template edits never overwrite earlier weeks. Assign responsible people using member records, then record actual completions/skipped items and notes after the activity. Named initiatives have no invented indicators. Reassembly contributions mean discussion, separately from financial class contributions. Programmes are retained rather than deleted; use Cancelled for a cancelled week.
+
+**Preview WhatsApp assignments** groups all activities for each facilitator into one message. Only members with an international phone and explicitly recorded consent are eligible. Copy/share text is available without provider setup. In dry-run mode, queue processing is a simulation and never sends a message. Live messages require an approved Meta body template with exactly three text parameters: recipient name, Sabbath date, assigned activities/times. Queuing the same assignments twice does not duplicate messages. Changes cancel outdated queued jobs; a worker also checks assignment freshness and expiry. Messages already being sent or accepted cannot be withdrawn. Changed assignments require another explicit preview/queue action; reverting to an earlier assignment set retains its earlier deduplication history. Failed/cancelled messages are not silently requeued; inspect WhatsApp status and use the existing review/retry workflow where permitted.
+
+**Annual report** selects a year and exports recorded departmental figures. Current membership/classes are labelled as current snapshots, not historical year-end rosters. Financial access follows existing roles; viewers receive no financial fields and teachers cannot access department-wide exports. Currency totals remain separate and class contributions are a subset of offerings. Book statuses are current tracking stages, event registrations are not verified attendance, and outreach reach is not a unique-person count. Programme totals count explicitly recorded completions and omit facilitator identities and free-text notes. User-entered class/book/activity labels are included, so keep those labels suitable for sharing. Missing records never manufacture accomplishments.

@@ -48,3 +48,14 @@ At 06:56 UTC on 11 October 2026, Render confirmed a second successful deployment
 - The obsolete SSMS_ADMIN_PASSWORD environment variable was removed and saved in Render. Existing administrator records were retained; bootstrap configuration was not used to reset the live login password.
 
 No provider payment or upgrade was selected. Render Free sleeping/quota limits and Neon Free quotas still apply. The hourly notification workflow is initially disabled until repository variables/secrets are configured, and live Meta credentials/templates/delivery are not enabled or verified. No real members, attendance or offerings were created during acceptance testing.
+
+## Registers, quarterly books, annual report, programme and import update
+
+Local verification on 11 October 2026:
+
+- 38 executed Python checks passed: 26 real HTTP/SQLite checks, eight WSGI/security/configuration checks and four independent annual-arithmetic/import fixtures. The separate 27-check PostgreSQL suite is skipped locally because this host has no PostgreSQL server.
+- Nine Chromium workflows passed in 15.3 seconds after integration fixes; subsequent final rerun includes the reviewed roster screen, all prior workflows, contributions with duplicate/zero handling, teacher book requests/staff tracking, independent template/week history, honest WhatsApp dry runs, annual print/CSV/privacy, and mobile layouts.
+- Private local staging imported 24 photographed roster members and repeated the import with zero new records. Five rows carry source-review notes. Printed phone strings and unknown join dates were retained; no consent, login accounts or messages were created. Private data are outside the repository/source ZIP; automated fixtures and screenshots remain synthetic.
+- New HTTP checks cover cross-class teacher access, concurrent contribution uniqueness, book status/version rules, report year/currency/privacy, template/week versioning, stale queued assignments, notification deduplication, consent, actual completion, additive restart preservation and atomic reviewed import conflicts.
+
+Generated annual and quarter PDFs exercise browser print CSS. Source-only packaging excludes private roster previews, databases and test artifacts. Hosted and PostgreSQL results for this release are recorded after actual verification; the earlier hosted commit is not evidence that new screens are deployed.

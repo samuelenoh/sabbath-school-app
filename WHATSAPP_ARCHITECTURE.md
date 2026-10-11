@@ -112,3 +112,11 @@ The supported template scope is text body parameters. Media headers, URL/button 
 The dashboard process button handles up to three jobs per request; the scheduled worker handles up to 100. Production requests require the configured Origin; webhooks instead authenticate their raw-body signature. The included systemd timer runs one worker at a time approximately once per minute. Rules use UTC dates.
 
 Changing an opted-in phone requires first saving with consent unchecked and then recording fresh consent for the new number. Consent cannot silently carry across to a different recipient. Application dates and scheduled rules use the UTC clock regardless of host timezone.
+
+## Weekly facilitator assignments
+
+The weekly programme preview prepares one combined message per assigned member, using an approved template with body parameters `[recipient name, Sabbath date, assigned activities with optional local times]`. Configure the exact approved template name and language in the queue dialog; `sabbath_programme_assignment` is an editable suggested name, not a claim that Meta has approved it. The copy/share preview is suggested wording; approved template text controls actual provider wording.
+
+Only admins/secretaries preview or queue assignments. Membership import does not record consent. Assignment fingerprints deduplicate repeated queues across template reuse and ignore completion/private-note edits. Changes cancel stale queued messages; the worker checks cancellation, fingerprint, assignment membership, expiry and current consent before claiming. A send already in progress cannot be recalled. Queuing requires a current/future Sabbath and an unchanged reviewed programme version. Provider status remains draft, queued, dry_run, accepted, sent, delivered, read, failed, uncertain or cancelled as applicable; only signed provider events establish delivery/read.
+
+Live mode still requires META_ACCESS_TOKEN, META_PHONE_NUMBER_ID, META_GRAPH_VERSION, META_APP_SECRET and META_VERIFY_TOKEN in the backend environment, an approved matching template, opted-in recipients, signed webhook setup, and a worker schedule. No real broadcast is part of testing or deployment. Meta billing and policy approval are independent of the free web hosting.
