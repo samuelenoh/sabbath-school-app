@@ -75,3 +75,5 @@ Required controls now show an explicit Required badge while preserving their acc
 The member search and class filter now wrap as complete controls with enough clearance for focus outlines, stacking at narrow widths. Tests verify separation at 390, 610, 768 and 1280 px and that changing class retains the search term.
 
 All 13 Chromium workflows passed locally; new coverage exercises missing required fields, malformed email, retained values after a simulated 503, delayed saving feedback, initial connection retry and sign-in errors. Existing Python tests passed locally; PostgreSQL validation is performed in isolated GitHub CI. Synthetic fixtures only. The static asset allowlist serves the new shared feedback script; backend authorization and notification behavior are unchanged. Previously stopped backup-test edits remain excluded from this release.
+
+The official World Church English Standard Logo is now used on sign-in, navigation and startup, using unmodified white and forest SVGs with preserved proportions. Source links and exact asset hashes are recorded in BRANDING.md. Logo rendering is checked during browser sign-in and in desktop/mobile previews.
