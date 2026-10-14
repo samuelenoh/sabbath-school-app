@@ -1,5 +1,6 @@
 const {test,expect}=require('@playwright/test');
 async function login(page,email='admin@ssms.local'){
+ await page.route('**/api/lessons/current',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({available:true,day:'2026-10-14',quarter_title:'Synthetic quarterly',week_title:'Synthetic published week',week_number:3,week_start:'2026-10-10',week_end:'2026-10-16',daily_url:'https://absg.sspmadventist.org/en/2026-04/03/05',weekly_url:'https://absg.sspmadventist.org/en/2026-04/03'})}));
  await page.goto('/');await expect(page.getByRole('img',{name:'Seventh-day Adventist Church',exact:true})).toBeVisible();await expect.poll(()=>page.getByRole('img',{name:'Seventh-day Adventist Church',exact:true}).evaluate(img=>img.complete&&img.naturalWidth>0)).toBeTruthy();await page.getByLabel('Email address').fill(email);await page.getByLabel('Password',{exact:true}).fill(process.env.SSMS_DEMO_PASSWORD);
  await page.getByRole('button',{name:'Sign in →',exact:true}).click();await expect(page.getByRole('heading',{name:'Welcome to your Sabbath School'})).toBeVisible();
 }
@@ -127,4 +128,13 @@ test('search and class filters never overlap at narrow widths',async({page},test
  }
  await page.setViewportSize({width:610,height:900});await page.getByRole('button',{name:'Members',exact:true}).click();await page.locator('#search').fill('no-such-member-search');await expect(page.locator('tbody')).toContainText('No records match');await page.locator('#class-filter').selectOption('1');await expect(page.locator('#search')).toHaveValue('no-such-member-search');await expect(page.locator('tbody')).toContainText('No records match');await page.locator('#search').fill('');
  await page.screenshot({path:testInfo.outputPath('search-filter-spacing.png')});
+});
+
+test('current published lesson loads automatically and fails honestly',async({page},testInfo)=>{
+ await login(page);await page.getByRole('button',{name:'Lesson study',exact:true}).click();
+ await expect(page.locator('#automatic-lesson')).toContainText('Synthetic published week');await expect(page.getByRole('link',{name:'Read today’s study ↗',exact:true})).toHaveAttribute('href','https://absg.sspmadventist.org/en/2026-04/03/05');
+ await expect(page.getByRole('link',{name:'Read this week’s lesson ↗',exact:true})).toHaveAttribute('rel','noopener noreferrer');await page.screenshot({path:testInfo.outputPath('automatic-current-lesson.png'),fullPage:true});
+ await page.route('**/api/lessons/current',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({available:false,day:'2026-10-14',publisher_url:'https://absg.sspmadventist.org/this-week',message:'Current details are temporarily unavailable.'})}));
+ await page.getByRole('button',{name:'Lesson study',exact:true}).click();await expect(page.locator('#automatic-lesson')).toContainText('temporarily unavailable');await expect(page.getByRole('link',{name:'Open the current study ↗',exact:true})).toHaveAttribute('href','https://absg.sspmadventist.org/this-week');await expect(page.locator('#automatic-lesson')).not.toContainText('Synthetic published week');
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
