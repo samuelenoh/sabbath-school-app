@@ -101,7 +101,7 @@ function requestFeedback(method){
 }
 function initialLoadFailure(){
  if(document.querySelector('#login-form'))return;
- document.getElementById('app').innerHTML='<main class="startup-loader"><section class="startup-card"><div class="brand-icon" aria-hidden="true">✧</div><h1>Unable to open your workspace</h1><div class="error" role="alert"></div><button class="primary" id="startup-retry">Try again</button></section></main>';
+ document.getElementById('app').innerHTML='<main class="startup-loader"><section class="startup-card"><img class="startup-logo" src="/adventist-logo-forest.svg" alt="Seventh-day Adventist Church" width="643" height="173"><h1>Unable to open your workspace</h1><div class="error" role="alert"></div><button class="primary" id="startup-retry">Try again</button></section></main>';
  feedbackError(document.querySelector('.startup-card .error'),'Check your connection and try again. The free hosting service may need a moment to wake up.');
  document.getElementById('startup-retry').onclick=()=>refresh().catch(initialLoadFailure);
 }
