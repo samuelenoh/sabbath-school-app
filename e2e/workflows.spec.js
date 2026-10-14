@@ -74,3 +74,17 @@ test('reviewed roster import preserves unknown dates and skips duplicates',async
  const row=page.locator('tbody tr').filter({hasText:'Synthetic Imported Member'});await row.locator('[data-edit]').click();await expect(page.getByLabel('Phone as printed (optional)')).toHaveValue('0201234577');await expect(page.getByLabel('Join date unknown (exclude from annual join counts)')).toBeChecked();await expect(page.getByLabel('Member has consented to WhatsApp messages')).not.toBeChecked();
 });
 
+
+test('dropdown popup has visible options and works with mouse and keyboard',async({page},testInfo)=>{
+ await login(page);await page.screenshot({path:testInfo.outputPath('readable-dashboard.png'),fullPage:true});
+ await page.getByRole('button',{name:'Book orders',exact:true}).click();const status=page.locator('#order-status');
+ const custom=await page.evaluate(()=>CSS.supports('appearance','base-select'));
+ if(custom){
+  await status.click();const ordered=page.getByRole('option',{name:'Ordered',exact:true});await expect(ordered).toBeVisible();await page.getByRole('option',{name:'Received',exact:true}).hover();
+  await page.screenshot({path:testInfo.outputPath('readable-dropdown.png'),fullPage:true});await ordered.click();await expect(status).toHaveValue('Ordered');
+  await status.focus();await page.keyboard.press('Space');await expect(page.getByRole('option',{name:'Ordered',exact:true})).toBeVisible();await page.keyboard.press('Home');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');await expect(status).toHaveValue('Requested');
+  await status.focus();await page.keyboard.press('Space');await page.keyboard.press('Escape');await expect(status).toHaveValue('Requested');
+ }else{await status.selectOption('Ordered');await expect(status).toHaveValue('Ordered')}
+ await page.getByRole('button',{name:'Members',exact:true}).click();await page.locator('[data-new="members"]').click();await page.getByLabel('Full name',{exact:true}).fill('Unsaved preview');await page.getByLabel('Class office (printed label)').selectOption('H.T');await expect(page.getByRole('button',{name:'Save record',exact:true})).toBeInViewport();await page.screenshot({path:testInfo.outputPath('readable-member-form.png'),fullPage:true});await page.getByRole('button',{name:'Cancel',exact:true}).click();
+ await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Book orders',exact:true}).click();await page.locator('#order-status').selectOption('');await expect(page.getByRole('button',{name:'Book orders',exact:true})).toBeInViewport({ratio:0.99});const dimensions=await page.evaluate(()=>({w:innerWidth,s:document.documentElement.scrollWidth}));expect(dimensions.s).toBeLessThanOrEqual(dimensions.w);await page.screenshot({path:testInfo.outputPath('readable-mobile.png'),fullPage:true});
+});
