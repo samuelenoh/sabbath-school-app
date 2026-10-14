@@ -2,6 +2,7 @@
 import argparse, csv, hashlib, hmac, io, json, os, re, secrets, sqlite3, time
 from database import connection, is_postgres
 from annual_report import build_annual_report
+from automatic_lessons import current_lesson
 from programme import default_template, assignment_fingerprint, assignment_previews
 from datetime import date, datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -485,6 +486,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(200,{'user':{k:u[k] for k in ('id','name','email','role')},'csrf':csrf},
                                      {'Set-Cookie':f'ssms_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800{secure}'})
                 user=self.auth(c,method!='GET'); role=user['role']; uid=user['id']
+                if path=='/api/lessons/current' and method=='GET':
+                    return self.send(200,current_lesson())
                 if path=='/api/logout' and method=='POST':
                     c.execute('DELETE FROM sessions WHERE user_id=? AND csrf=?',(uid,user['csrf']));c.commit()
                     return self.send(200,{'ok':True},{'Set-Cookie':'ssms_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'})
