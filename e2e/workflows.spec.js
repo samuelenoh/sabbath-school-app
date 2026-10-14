@@ -1,6 +1,6 @@
 const {test,expect}=require('@playwright/test');
 async function login(page,email='admin@ssms.local'){
- await page.goto('/');await page.getByLabel('Email address').fill(email);await page.getByLabel('Password',{exact:true}).fill(process.env.SSMS_DEMO_PASSWORD);
+ await page.goto('/');await expect(page.getByRole('img',{name:'Seventh-day Adventist Church',exact:true})).toBeVisible();await expect.poll(()=>page.getByRole('img',{name:'Seventh-day Adventist Church',exact:true}).evaluate(img=>img.complete&&img.naturalWidth>0)).toBeTruthy();await page.getByLabel('Email address').fill(email);await page.getByLabel('Password',{exact:true}).fill(process.env.SSMS_DEMO_PASSWORD);
  await page.getByRole('button',{name:'Sign in →',exact:true}).click();await expect(page.getByRole('heading',{name:'Welcome to your Sabbath School'})).toBeVisible();
 }
 test('all requested module screens render',async({page})=>{
