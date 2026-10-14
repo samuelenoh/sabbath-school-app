@@ -117,6 +117,7 @@ test('initial connection failure shows a retry card instead of a blank page',asy
  await expect(page.getByLabel('Email address',{exact:true})).toHaveAttribute('aria-required','true');
  await page.getByLabel('Email address',{exact:true}).fill('admin@ssms.local');await page.getByLabel('Password',{exact:true}).fill('incorrect-test-password');await page.getByRole('button',{name:'Sign in →',exact:true}).click();
  await expect(page.locator('#login-error .error-body')).toContainText('Email or password is incorrect');await expect(page.getByRole('button',{name:'Sign in →',exact:true})).toBeEnabled();
+ await page.route('**/api/login',route=>route.fulfill({status:429,contentType:'application/json',body:JSON.stringify({error:'Too many attempts. Try again in 15 minutes.'})}),{times:1});await page.getByRole('button',{name:'Sign in →',exact:true}).click();await expect(page.locator('#login-error')).toContainText('15 minutes');await expect(page.getByRole('button',{name:'Sign in →',exact:true})).toBeEnabled();
 });
 
 test('search and class filters never overlap at narrow widths',async({page},testInfo)=>{
