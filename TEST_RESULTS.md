@@ -67,3 +67,11 @@ The shared interface now uses 16 px form/body text, stronger labels and headings
 Long dialogs retain visible action buttons while scrolling. Mobile navigation keeps the active module in view. Print report sizes remain unchanged. No backend permissions, church records, programme assignments or notification settings were changed for this visual update.
 
 Browser coverage now includes ten workflows. The nine existing workflows passed locally with the larger controls. A focused popup workflow verifies real mouse and keyboard selection, Escape dismissal, visible form actions and mobile navigation/layout; desktop, popup, form and mobile screenshots were visually inspected. GitHub CI provides the complete release run. The unrelated, previously stopped backup-test edits remain outside this UI commit.
+
+## Required fields, error feedback, loaders and filter spacing — 14 October 2026
+
+Required controls now show an explicit Required badge while preserving their accessible names and native required semantics. Forms show field-specific validation, linked descriptions and an error summary without discarding entered values. Error cards distinguish validation from failed actions. Request feedback includes an initial workspace loader, a retry card for unavailable startup, saving/sign-in button spinners, an announced request indicator, duplicate-button protection and reduced-motion support. Network failures during writes ask users to check whether the record was saved before retrying. No requests are automatically repeated.
+
+The member search and class filter now wrap as complete controls with enough clearance for focus outlines, stacking at narrow widths. Tests verify separation at 390, 610, 768 and 1280 px and that changing class retains the search term.
+
+All 13 Chromium workflows passed locally; new coverage exercises missing required fields, malformed email, retained values after a simulated 503, delayed saving feedback, initial connection retry and sign-in errors. Existing Python tests passed locally; PostgreSQL validation is performed in isolated GitHub CI. Synthetic fixtures only. The static asset allowlist serves the new shared feedback script; backend authorization and notification behavior are unchanged. Previously stopped backup-test edits remain excluded from this release.
