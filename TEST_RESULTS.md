@@ -59,3 +59,11 @@ Local verification on 11 October 2026:
 - New HTTP checks cover cross-class teacher access, concurrent contribution uniqueness, book status/version rules, report year/currency/privacy, template/week versioning, stale queued assignments, notification deduplication, consent, actual completion, additive restart preservation and atomic reviewed import conflicts.
 
 Generated annual and quarter PDFs exercise browser print CSS. Source-only packaging excludes private roster previews, databases and test artifacts. Hosted and PostgreSQL results for this release are recorded after actual verification; the earlier hosted commit is not evidence that new screens are deployed.
+
+## Interface readability update — 14 October 2026
+
+The shared interface now uses 16 px form/body text, stronger labels and headings, larger buttons and checkboxes, clearer borders and keyboard focus, and higher-contrast helper/table/status text. Supporting browsers get an explicitly styled gray dropdown surface with white rounded options, green selected/hover states, a border/shadow and a selected checkmark; others keep native controls with explicit foreground/background colors and a light control color scheme. This follows [MDN's progressive enhancement guidance](https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Forms/Customizable_select).
+
+Long dialogs retain visible action buttons while scrolling. Mobile navigation keeps the active module in view. Print report sizes remain unchanged. No backend permissions, church records, programme assignments or notification settings were changed for this visual update.
+
+Browser coverage now includes ten workflows. The nine existing workflows passed locally with the larger controls. A focused popup workflow verifies real mouse and keyboard selection, Escape dismissal, visible form actions and mobile navigation/layout; desktop, popup, form and mobile screenshots were visually inspected. GitHub CI provides the complete release run. The unrelated, previously stopped backup-test edits remain outside this UI commit.
