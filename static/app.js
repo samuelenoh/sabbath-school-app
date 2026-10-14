@@ -19,7 +19,7 @@ async function api(path,method='GET',data){
   let body;try{body=await r.json()}catch{throw Error('The service returned an unexpected response. Please try again in a moment.')}
   if(!r.ok){
    if(r.status===401&&path!='/api/login'){login();throw Error('Your session has expired. Sign in again to continue.')}
-   if(r.status===429)throw Error('Too many attempts. Please wait a moment before trying again.');
+   if(r.status===429)throw Error(body.error||'Too many attempts. Please wait before trying again.');
    if(r.status>=500)throw Error('The service is temporarily unavailable. Please try again in a moment.');
    throw Error(body.error||'Please check your entries and try again.');
   }
