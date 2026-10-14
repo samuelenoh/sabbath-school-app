@@ -88,3 +88,43 @@ test('dropdown popup has visible options and works with mouse and keyboard',asyn
  await page.getByRole('button',{name:'Members',exact:true}).click();await page.locator('[data-new="members"]').click();await page.getByLabel('Full name',{exact:true}).fill('Unsaved preview');await page.getByLabel('Class office (printed label)').selectOption('H.T');await expect(page.getByRole('button',{name:'Save record',exact:true})).toBeInViewport();await page.screenshot({path:testInfo.outputPath('readable-member-form.png'),fullPage:true});await page.getByRole('button',{name:'Cancel',exact:true}).click();
  await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Book orders',exact:true}).click();await page.locator('#order-status').selectOption('');await expect(page.getByRole('button',{name:'Book orders',exact:true})).toBeInViewport({ratio:0.99});const dimensions=await page.evaluate(()=>({w:innerWidth,s:document.documentElement.scrollWidth}));expect(dimensions.s).toBeLessThanOrEqual(dimensions.w);await page.screenshot({path:testInfo.outputPath('readable-mobile.png'),fullPage:true});
 });
+
+test('required fields, helpful error cards and saving feedback',async({page},testInfo)=>{
+ await login(page);await page.getByRole('button',{name:'Members',exact:true}).click();await page.locator('[data-new="members"]').click();
+ await expect(page.locator('#record-form .form-guidance')).toContainText('Required');
+ await expect(page.getByLabel('Full name',{exact:true})).toHaveAttribute('aria-required','true');
+ await expect(page.getByLabel('Residence',{exact:true})).not.toHaveAttribute('aria-required','true');
+ await page.getByLabel('Email',{exact:true}).fill('incorrect-email');await page.getByRole('button',{name:'Save record',exact:true}).click();
+ await expect(page.locator('#dialog-error')).toContainText('Please check your entries');await expect(page.getByLabel('Full name',{exact:true})).toHaveAttribute('aria-invalid','true');
+ await expect(page.locator('.field-error')).toHaveCount(2);await page.screenshot({path:testInfo.outputPath('required-fields-errors.png')});
+ await page.getByLabel('Full name',{exact:true}).fill('Feedback Test Member');await page.getByLabel('Email',{exact:true}).fill('');
+ await expect(page.locator('.field-error')).toHaveCount(0);
+ await page.route('**/api/members',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'internal failure'})}),{times:1});
+ await page.getByRole('button',{name:'Save record',exact:true}).click();await expect(page.locator('#dialog-error')).toContainText('temporarily unavailable');
+ await expect(page.locator('#dialog-error .error-body strong')).toContainText('complete this action');await expect(page.getByLabel('Full name',{exact:true})).toHaveValue('Feedback Test Member');
+ let release;const gate=new Promise(resolve=>release=resolve);
+ await page.route('**/api/members',async route=>{await gate;await route.continue()},{times:1});
+ await page.getByRole('button',{name:'Save record',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Save record',exact:true})).toHaveAttribute('aria-busy','true');await expect(page.locator('#request-loader')).toBeVisible();
+ await expect(page.getByRole('button',{name:'Save record',exact:true})).toContainText('Saving');await page.screenshot({path:testInfo.outputPath('saving-loader.png')});
+ release();await expect(page.locator('#editor')).not.toBeVisible();await expect(page.locator('#request-loader')).toBeHidden();await expect(page.locator('tbody')).toContainText('Feedback Test Member');
+});
+
+test('initial connection failure shows a retry card instead of a blank page',async({page})=>{
+ await page.route('**/api/state',route=>route.abort(),{times:1});await page.goto('/');await expect(page.getByRole('heading',{name:'Unable to open your workspace'})).toBeVisible();
+ await expect(page.locator('.startup-card .error')).toContainText('Check your connection');await page.getByRole('button',{name:'Try again',exact:true}).click();await expect(page.getByRole('heading',{name:'Sign in to Sabbath School'})).toBeVisible();
+ await expect(page.getByLabel('Email address',{exact:true})).toHaveAttribute('aria-required','true');
+ await page.getByLabel('Email address',{exact:true}).fill('admin@ssms.local');await page.getByLabel('Password',{exact:true}).fill('incorrect-test-password');await page.getByRole('button',{name:'Sign in →',exact:true}).click();
+ await expect(page.locator('#login-error .error-body')).toContainText('Email or password is incorrect');await expect(page.getByRole('button',{name:'Sign in →',exact:true})).toBeEnabled();
+});
+
+test('search and class filters never overlap at narrow widths',async({page},testInfo)=>{
+ await login(page);await page.getByRole('button',{name:'Members',exact:true}).click();
+ for(const width of [390,610,768,1280]){
+  await page.setViewportSize({width,height:900});await page.getByRole('button',{name:'Members',exact:true}).click();await page.locator('#search').focus();
+  const rects=await page.evaluate(()=>{const a=document.querySelector('#search').getBoundingClientRect(),b=document.querySelector('#class-filter').getBoundingClientRect();return {separate:a.right+6<=b.left||a.bottom+6<=b.top||b.bottom+6<=a.top,width:innerWidth,scroll:document.documentElement.scrollWidth}});
+  expect(rects.separate,`Search/filter overlap at ${width}px`).toBeTruthy();expect(rects.scroll).toBeLessThanOrEqual(rects.width);
+ }
+ await page.setViewportSize({width:610,height:900});await page.getByRole('button',{name:'Members',exact:true}).click();await page.locator('#search').fill('no-such-member-search');await expect(page.locator('tbody')).toContainText('No records match');await page.locator('#class-filter').selectOption('1');await expect(page.locator('#search')).toHaveValue('no-such-member-search');await expect(page.locator('tbody')).toContainText('No records match');await page.locator('#search').fill('');
+ await page.screenshot({path:testInfo.outputPath('search-filter-spacing.png')});
+});
