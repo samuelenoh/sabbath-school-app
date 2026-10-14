@@ -202,3 +202,10 @@ label>.required-mark{margin-top:0;justify-self:end}.form-guidance{margin:0 0 18p
 .filters>label>select{width:100%;min-width:0}
 @media(max-width:720px){.toolbar>.filters:first-child{flex-basis:100%}.filters>label:has(.search){max-width:none}.filters>label:has(.search),.filters>label:has(>select){flex:1 1 100%}}
 .form-grid{align-items:start}
+/* Official standard church lockup: preserve artwork, proportions and surrounding space. */
+.brand{display:block;padding:12px 12px 24px}
+.church-logo{display:block;width:100%;height:auto;max-width:260px;margin:0 0 22px;object-fit:contain}
+.brand-department{font:600 22px Georgia,serif}.brand-department small{font-family:Segoe UI,Arial,sans-serif}
+.login-story .brand{padding:14px 0 20px}.login-story .church-logo{width:260px;max-width:100%;margin-bottom:26px}
+.startup-logo{display:block;width:270px;max-width:100%;height:auto;object-fit:contain;margin:8px auto 30px}
+@media(max-width:720px){.sidebar .brand{padding:12px 8px 18px}.sidebar .church-logo{width:225px;max-width:100%;margin-bottom:20px}.brand-department{font-size:20px}}
