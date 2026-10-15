@@ -44,7 +44,7 @@ function enhanceFeedback(){
   const label=control.labels?.[0];
   if(!control.dataset.fieldCaption){control.dataset.fieldCaption=fieldCaption(control);if(label&&!control.hasAttribute('aria-label'))control.setAttribute('aria-label',control.dataset.fieldCaption)}
   if(control.required&&label&&!label.querySelector('.required-mark')){
-   const mark=document.createElement('span');mark.className='required-mark';mark.textContent='Required';mark.setAttribute('aria-hidden','true');label.insertBefore(mark,control);
+   const mark=document.createElement('span');mark.className='required-mark';mark.textContent='Required';mark.setAttribute('aria-hidden','true');label.insertBefore(mark,control.closest('.date-field')||control);
    control.setAttribute('aria-required','true');
   }
   if(control.name==='phone'&&!control.hasAttribute('pattern'))control.pattern='\\+[1-9][0-9]{7,14}';
