@@ -81,3 +81,11 @@ The official World Church English Standard Logo is now used on sign-in, navigati
 ## Automatic published study — 14 October 2026
 
 The English Standard Adult weekly panel and daily reading link are selected from the official Adventech v3 feed using published dates and Ghana/UTC time. The live metadata source and daily publisher destination were checked; the full guide remains on the publisher's website. Six independent provider fixtures test year/day/week boundaries, ambiguity, safe paths, caches and fallback; an HTTP check covers authenticated read-only access; browser coverage now has 14 workflows with a synthetic current-study and outage fixture. See AUTOMATIC_LESSONS.md for sources, operational limits and content reuse rules.
+
+## Calendar appearance and in-page lesson reader — 15 October 2026
+
+All date fields retain their native date values, keyboard entry, required rules and min/max limits, with a new green/white/gray calendar button and modal. The calendar provides month/year navigation, today's marker, selected-date styling, Clear/Today actions, roving keyboard focus, arrow/Home/End/PageUp/PageDown navigation and Escape dismissal. It works inside existing editor dialogs and returns focus after filter rerenders. It never submits or saves a form by selecting a date.
+
+The automatically selected weekly title is followed by an embedded official reader, with “Lesson & memory text” and “Today's study” tabs. Guide text remains served by the publisher. Full-page fallback and loading feedback remain visible; the parent CSP permits only the specific official reader host for frames. The actual remote memory-text content was checked in a sandboxed local browser preview, independently of synthetic fixtures.
+
+Browser coverage now includes 17 workflows, with dedicated leap-day, nested-dialog, mobile-fit, min/max and keyboard-selection checks plus embedded memory-text/study and tab-navigation checks. Screenshots use synthetic records. Backend tests remain isolated; real church data, role assignments and notification delivery settings are untouched.
