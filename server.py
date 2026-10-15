@@ -416,7 +416,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Referrer-Policy','same-origin')
         if production(): self.send_header('Strict-Transport-Security','max-age=31536000')
         self.send_header('Permissions-Policy','camera=(), microphone=(), geolocation=()')
-        self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+        self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src https://absg.sspmadventist.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
         for k,v in (headers or {}).items(): self.send_header(k,v)
         self.end_headers(); self.wfile.write(body)
     def request_bytes(self):
@@ -457,7 +457,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200,{'status':'ok'})
             if not path.startswith('/api/'):
                 if method!='GET': return self.send(405,{'error':'Method not allowed.'})
-                files={'/':('index.html','text/html'),'/app.js':('app.js','application/javascript'),'/style.css':('style.css','text/css'),**{'/'+name:(name,'application/javascript') for name in ('class-records.js','annual-report.js','programme.js','roster-import.js','ui-feedback.js')},**{'/'+name:(name,'image/svg+xml') for name in ('adventist-logo-white.svg','adventist-logo-forest.svg')}}
+                files={'/':('index.html','text/html'),'/app.js':('app.js','application/javascript'),'/style.css':('style.css','text/css'),**{'/'+name:(name,'application/javascript') for name in ('class-records.js','annual-report.js','programme.js','roster-import.js','ui-feedback.js','date-picker.js','study-reader.js')},**{'/'+name:(name,'image/svg+xml') for name in ('adventist-logo-white.svg','adventist-logo-forest.svg')}}
                 if path not in files: return self.send(404,{'error':'Not found.'})
                 f,ct=files[path]; return self.send(200,raw=(ROOT/'static'/f).read_bytes(),content_type=ct)
             with connect() as c:
